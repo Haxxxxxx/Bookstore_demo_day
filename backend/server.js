@@ -12,66 +12,129 @@ app.use(cors());
 
 // MySQL connection
 const db = mysql.createConnection({
-    host: 'mysql-projet1sql.alwaysdata.net',  // For local, it might be 'localhost'
-    user: '376569',  // The username you use to log into phpMyAdmin
-    password: 'ZwNm3hJe52dE!wh',  // The password you use to log into phpMyAdmin
-    database: 'projet1sql_groupe3',  // The name of your database
-    port: '3306'  // Default MySQL port, unless changed
+  host: 'mysql-projet1sql.alwaysdata.net',  // For local, it might be 'localhost'
+  user: '376569',  // The username you use to log into phpMyAdmin
+  password: 'ZwNm3hJe52dE!wh',  // The password you use to log into phpMyAdmin
+  database: 'projet1sql_groupe3',  // The name of your database
+  port: '3306'  // Default MySQL port, unless changed
 });
 
 
 db.connect((err) => {
-    if (err) {
-        console.error('MySQL connection failed:', err.message);  // Detailed error message
-    } else {
-        console.log('Connected to MySQL database');
-    }
+  if (err) {
+    console.error('MySQL connection failed:', err.message);  // Detailed error message
+  } else {
+    console.log('Connected to MySQL database');
+  }
 });
 
 // Endpoints
+// Simplified Registration (No bcrypt, no hashed password)
+app.post('/api/register', (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  const { email, password, full_name, phone, role_id = 2 } = req.body; // Default role_id for user
+
+  // Insert the user into the user table (plain text password for now)
+  const userQuery = 'INSERT INTO user (email, password, full_name, phone) VALUES (?, ?, ?, ?)';
+  db.query(userQuery, [email, password, full_name, phone], (err, userResult) => {
+    if (err) throw err;
+
+    const userId = userResult.insertId;
+
+    // Insert the user-role relationship into user_role table
+    const roleQuery = 'INSERT INTO user_role (user_id, role_id) VALUES (?, ?)';
+    db.query(roleQuery, [userId, role_id], (err, roleResult) => {
+      if (err) throw err;
+
+      // Respond with the success message
+      res.json({ message: 'User registered successfully', userId });
+    });
+  });
+});
+
+
+// Login endpoint without security
+app.post('/api/login', (req, res) => {
+  const { email, password } = req.body;
+
+  // Query to find user by email
+  const query = 'SELECT * FROM user WHERE email = ?';
+  db.query(query, [email], (err, results) => {
+    if (err) throw err;
+
+    if (results.length > 0) {
+      const user = results[0];
+
+      // Compare plain text password
+      if (user.password === password) {
+        // Success, send back user details (no JWT, no hashed passwords)
+        res.json({
+          message: 'Login successful',
+          user: {
+            id: user.id,
+            email: user.email,
+            full_name: user.full_name,
+            role: 'user', // For simplicity, we'll just assign the role as 'user'
+          }
+        });
+      } else {
+        // Incorrect password
+        res.status(401).json({ message: 'Invalid credentials' });
+      }
+    } else {
+      // User not found
+      res.status(404).json({ message: 'User not found' });
+    }
+  });
+});
+
 
 // Get all books
 app.get('/api/books', (req, res) => {
-    db.query('SELECT * FROM book', (err, results) => {
-        if (err) throw err;
-        res.json(results);
-    });
+  db.query('SELECT * FROM book', (err, results) => {
+    if (err) throw err;
+    res.json(results);
+  });
 });
 
 // Retrieve all products (books) with their associated category
 app.get('/api/books-with-category', (req, res) => {
-    const query = `
+  const query = `
       SELECT book.id, book.title, category.genre AS genre, category.sub_genre AS sub_genre
       FROM book
       JOIN category ON book.category_id = category.id;
     `;
 
-    db.query(query, (err, results) => {
-        if (err) throw err;
-        res.json(results);
-    });
+  db.query(query, (err, results) => {
+    if (err) throw err;
+    res.json(results);
+  });
 });
 
 // Get all authors for a particular book
 app.get('/api/book/:id/authors', (req, res) => {
-    const { id } = req.params;
+  const { id } = req.params;
 
-    const query = `
+  const query = `
       SELECT author.name, author.surname
       FROM author
       JOIN book ON book.author_id = author.id
       WHERE book.id = ?;
     `;
 
-    db.query(query, [id], (err, results) => {
-        if (err) throw err;
-        res.json(results);
-    });
+  db.query(query, [id], (err, results) => {
+    if (err) throw err;
+    res.json(results);
+  });
 });
 
 // Find authors who have written more than 3 books in the store
 app.get('/api/authors/more-than-3-books', (req, res) => {
-    const query = `
+  const query = `
       SELECT author.name, author.surname, COUNT(book.id) AS book_count
       FROM author
       JOIN book ON book.author_id = author.id
@@ -79,59 +142,59 @@ app.get('/api/authors/more-than-3-books', (req, res) => {
       HAVING COUNT(book.id) > 3;
     `;
 
-    db.query(query, (err, results) => {
-        if (err) throw err;
-        res.json(results);
-    });
+  db.query(query, (err, results) => {
+    if (err) throw err;
+    res.json(results);
+  });
 });
 
 
 // Get a single book by ID
 app.get('/api/books/:id', (req, res) => {
-    const { id } = req.params;
-    db.query('SELECT * FROM book WHERE id = ?', [id], (err, results) => {
-        if (err) throw err;
-        res.json(results[0]);
-    });
+  const { id } = req.params;
+  db.query('SELECT * FROM book WHERE id = ?', [id], (err, results) => {
+    if (err) throw err;
+    res.json(results[0]);
+  });
 });
 
 // Add a new book
 app.post('/api/books', (req, res) => {
-    const { title, description, format, price, author_id, category_id } = req.body;
-    db.query('INSERT INTO book (title, description, format, price, author_id, category_id) VALUES (?, ?, ?, ?, ?, ?)', [title, description, format, price, author_id, category_id], (err, results) => {
-        if (err) throw err;
-        res.json({ message: 'Book added successfully', id: results.insertId });
-    });
+  const { title, description, format, price, author_id, category_id } = req.body;
+  db.query('INSERT INTO book (title, description, format, price, author_id, category_id) VALUES (?, ?, ?, ?, ?, ?)', [title, description, format, price, author_id, category_id], (err, results) => {
+    if (err) throw err;
+    res.json({ message: 'Book added successfully', id: results.insertId });
+  });
 });
 
 // Update a book by ID
 app.put('/api/books/:id', (req, res) => {
-    const { id } = req.params;
-    const { title, description, format, price } = req.body;
-    db.query('UPDATE book SET title = ?, description = ?, format = ?, price = ? WHERE id = ?', [title, description, format, price, id], (err, results) => {
-        if (err) throw err;
-        res.json({ message: 'Book updated successfully' });
-    });
+  const { id } = req.params;
+  const { title, description, format, price } = req.body;
+  db.query('UPDATE book SET title = ?, description = ?, format = ?, price = ? WHERE id = ?', [title, description, format, price, id], (err, results) => {
+    if (err) throw err;
+    res.json({ message: 'Book updated successfully' });
+  });
 });
 
 // Calculate the average price of books in each category
 app.get('/api/average-price-by-category', (req, res) => {
-    const query = `
+  const query = `
       SELECT category.genre, category.sub_genre, AVG(book.price) AS average_price
       FROM book
       JOIN category ON book.category_id = category.id
       GROUP BY category.genre, category.sub_genre;
     `;
 
-    db.query(query, (err, results) => {
-        if (err) throw err;
-        res.json(results);
-    });
+  db.query(query, (err, results) => {
+    if (err) throw err;
+    res.json(results);
+  });
 });
 
 // Find the most recently added book in each category
 app.get('/api/most-recent-book-in-category', (req, res) => {
-    const query = `
+  const query = `
       SELECT book.title, book.edition_year, category.genre, category.sub_genre
       FROM book
       JOIN category ON book.category_id = category.id
@@ -142,157 +205,173 @@ app.get('/api/most-recent-book-in-category', (req, res) => {
       );
     `;
 
-    db.query(query, (err, results) => {
-        if (err) throw err;
-        res.json(results);
-    });
+  db.query(query, (err, results) => {
+    if (err) throw err;
+    res.json(results);
+  });
 });
 
 
 // Delete a book by ID
 app.delete('/api/books/:id', (req, res) => {
-    const { id } = req.params;
-    db.query('DELETE FROM book WHERE id = ?', [id], (err, results) => {
-        if (err) throw err;
-        res.json({ message: 'Book deleted successfully' });
-    });
+  const { id } = req.params;
+  db.query('DELETE FROM book WHERE id = ?', [id], (err, results) => {
+    if (err) throw err;
+    res.json({ message: 'Book deleted successfully' });
+  });
 });
 
 // Add a book to the cart (create pending order if it doesn't exist)
-app.post('/api/cart/:userId', (req, res) => {
-    const { userId } = req.params;
-    const { bookId, quantity, format } = req.body;
-
-    // Check if a pending order already exists
-    db.query('SELECT id FROM `order` WHERE user_id = ? AND state = "pending"', [userId], (err, results) => {
-        if (err) throw err;
-
-        let orderId;
-        if (results.length === 0) {
-            // If no pending order exists, create one
-            db.query('INSERT INTO `order` (user_id, total_price, state, created_at) VALUES (?, 0, "pending", NOW())', [userId], (err, results) => {
-                if (err) throw err;
-                orderId = results.insertId;
-                addOrderItem(orderId);
-            });
-        } else {
-            // Use the existing pending order
-            orderId = results[0].id;
-            addOrderItem(orderId);
-        }
-
-        function addOrderItem(orderId) {
-            db.query('INSERT INTO order_item (order_id, book_id, quantity, format) VALUES (?, ?, ?, ?)', [orderId, bookId, quantity, format], (err, results) => {
-                if (err) throw err;
-                res.json({ message: 'Item added to cart', orderId });
-            });
-        }
-    });
-});
-
-// Get items in the cart for a user
+// Example: Get all items in a user's pending order (cart)
 app.get('/api/cart/:userId', (req, res) => {
     const { userId } = req.params;
-    
+
     const query = `
-        SELECT book.id, book.title, order_item.quantity, order_item.format
-        FROM book
-        JOIN order_item ON book.id = order_item.book_id
-        JOIN \`order\` ON order_item.order_id = \`order\`.id
-        WHERE \`order\`.user_id = ? AND \`order\`.state = "pending";
+      SELECT book.id, book.title, book.price, order_item.quantity, order_item.format, 
+             (book.price * order_item.quantity) AS total_item_price
+      FROM book
+      JOIN order_item ON book.id = order_item.book_id
+      JOIN \`order\` ON \`order\`.id = (SELECT o.id FROM \`order\` o WHERE o.user_id = ? AND o.state = 'pending' LIMIT 1)
+      WHERE order_item.book_id = book.id;
     `;
-    
+
     db.query(query, [userId], (err, results) => {
-        if (err) throw err;
+        if (err) {
+            console.error('Error executing query:', err);
+            return res.status(500).json({ error: 'Database query error' });
+        }
         res.json(results);
     });
 });
 
+
+
+// Get items in the cart for a user, including total price
+app.get('/api/cart/:userId', (req, res) => {
+  const { userId } = req.params;
+
+  const query = `
+      SELECT book.id, book.title, book.price, order_item.quantity, order_item.format, (book.price * order_item.quantity) AS total_item_price
+      FROM book
+      JOIN order_item ON book.id = order_item.book_id
+      JOIN \`order\` ON order_item.order_id = \`order\`.id
+      WHERE \`order\`.user_id = ? AND \`order\`.state = "pending";
+  `;
+
+  db.query(query, [userId], (err, results) => {
+    if (err) throw err;
+
+    // Calculate total cart price
+    const totalCartPrice = results.reduce((acc, item) => acc + item.total_item_price, 0);
+
+    res.json({ items: results, totalPrice: totalCartPrice });
+  });
+});
+
 // Update cart item quantity
+// Update cart item quantity (fixed query)
 app.put('/api/cart/:userId/:bookId', (req, res) => {
-    const { userId, bookId } = req.params;
-    const { quantity } = req.body;
+  const { userId, bookId } = req.params;
+  const { quantity } = req.body;
 
-    const query = `
+  const query = `
         UPDATE order_item 
-        JOIN \`order\` ON order_item.order_id = \`order\`.id
+        JOIN \`order\` ON \`order\`.user_id = ? 
         SET order_item.quantity = ?
-        WHERE \`order\`.user_id = ? AND order_item.book_id = ? AND \`order\`.state = "pending";
+        WHERE order_item.book_id = ? AND \`order\`.state = "pending";
     `;
 
-    db.query(query, [quantity, userId, bookId], (err, results) => {
-        if (err) throw err;
-        res.json({ message: 'Cart item updated' });
-    });
+  db.query(query, [userId, quantity, bookId], (err, results) => {
+    if (err) {
+      console.error('Error updating cart item:', err);
+      return res.status(500).json({ error: 'Database query error' });
+    }
+    res.json({ message: 'Cart item updated successfully' });
+  });
 });
 
-// Confirm order (update from pending to confirmed)
+// Confirm order (update from pending to confirmed and add payment)
 app.put('/api/cart/confirm/:userId', (req, res) => {
-    const { userId } = req.params;
+  const { userId } = req.params;
+  const { paymentMethod } = req.body;
 
-    const query = `
-        UPDATE \`order\`
-        SET state = "confirmed"
-        WHERE user_id = ? AND state = "pending";
-    `;
+  // Confirm the order by setting its state to 'confirmed'
+  const updateOrderState = `
+      UPDATE \`order\`
+      SET state = "confirmed"
+      WHERE user_id = ? AND state = "pending";
+  `;
 
-    db.query(query, [userId], (err, results) => {
-        if (err) throw err;
-        res.json({ message: 'Order confirmed' });
+  db.query(updateOrderState, [userId], (err, orderResults) => {
+    if (err) throw err;
+
+    // Once the order is confirmed, we add a payment entry
+    const createPayment = `
+          INSERT INTO payment (payment_method, payment_status, payment_date, amount, order_id, user_id)
+          SELECT ?, "Completed", NOW(), total_price, id, user_id
+          FROM \`order\`
+          WHERE user_id = ? AND state = "confirmed"
+      `;
+
+    db.query(createPayment, [paymentMethod, userId], (err) => {
+      if (err) throw err;
+      res.json({ message: 'Order confirmed and payment recorded' });
     });
+  });
 });
-  // Get all orders placed by a customer by user ID
+
+// Get all orders placed by a customer by user ID
 app.get('/api/orders/:userId', (req, res) => {
-    const { userId } = req.params;
-  
-    const query = `
+  const { userId } = req.params;
+
+  const query = `
       SELECT order.id, order.total_price, order.created_at
       FROM \`order\`
       WHERE order.user_id = ?;
     `;
-    
-    db.query(query, [userId], (err, results) => {
-      if (err) throw err;
-      res.json(results);
-    });
+
+  db.query(query, [userId], (err, results) => {
+    if (err) throw err;
+    res.json(results);
   });
-  
-  // Get all products in an order by order ID
+});
+
+// Get all products in an order by order ID
 app.get('/api/orders/:orderId/products', (req, res) => {
-    const { orderId } = req.params;
-  
-    const query = `
+  const { orderId } = req.params;
+
+  const query = `
       SELECT book.id, book.title, order_item.quantity
       FROM order_item
       JOIN book ON book.id = order_item.book_id
       WHERE order_item.order_id = ?;
     `;
-    
-    db.query(query, [orderId], (err, results) => {
-      if (err) throw err;
-      res.json(results);
-    });
+
+  db.query(query, [orderId], (err, results) => {
+    if (err) throw err;
+    res.json(results);
   });
+});
 
 // Get all customers with their wishlists
 app.get('/api/customers-with-wishlists', (req, res) => {
-    const query = `
+  const query = `
       SELECT user.id, user.full_name, book.title AS wishlist_item
       FROM user
       JOIN wishlist ON user.id = wishlist.user_id
       JOIN wishlist_item ON wishlist.wishlist_item_id = wishlist_item.id
       JOIN book ON wishlist_item.book_id = book.id;
     `;
-    
-    db.query(query, (err, results) => {
-      if (err) throw err;
-      res.json(results);
-    });
+
+  db.query(query, (err, results) => {
+    if (err) throw err;
+    res.json(results);
+  });
 });
 
-  // Get top 5 customers who have spent the most money
+// Get top 5 customers who have spent the most money
 app.get('/api/top-customers', (req, res) => {
-    const query = `
+  const query = `
       SELECT user.id, user.full_name, SUM(order.total_price) AS total_spent
       FROM user
       JOIN \`order\` ON user.id = order.user_id
@@ -300,64 +379,66 @@ app.get('/api/top-customers', (req, res) => {
       ORDER BY total_spent DESC
       LIMIT 5;
     `;
-    
-    db.query(query, (err, results) => {
-      if (err) throw err;
-      res.json(results);
-    });
-  });
 
-  // Get total quantity of books sold by category
+  db.query(query, (err, results) => {
+    if (err) throw err;
+    res.json(results);
+  });
+});
+
+// Get total quantity of books sold by category
 app.get('/api/books-sold-by-category', (req, res) => {
-    const query = `
+  const query = `
       SELECT category.genre, category.sub_genre, SUM(order_item.quantity) AS total_sold
       FROM book
       JOIN category ON book.category_id = category.id
       JOIN order_item ON book.id = order_item.book_id
       GROUP BY category.genre, category.sub_genre;
     `;
-    
-    db.query(query, (err, results) => {
-      if (err) throw err;
-      res.json(results);
-    });
-  });
 
-  // Get the most popular product in terms of the number of times it has been added to customers' carts
-app.get('/api/most-popular-product', (req, res) => {
-    const query = `
-      SELECT book.title, COUNT(order_item.book_id) AS times_added
-      FROM book
-      JOIN order_item ON book.id = order_item.book_id
-      JOIN \`order\` ON order_item.order_id = \`order\`.id
-      WHERE \`order\`.state IN ('pending', 'confirmed')
-      GROUP BY order_item.book_id
-      ORDER BY times_added DESC
-      LIMIT 1;
-    `;
-    
-    db.query(query, (err, results) => {
-      if (err) throw err;
-      res.json(results[0]);
-    });
+  db.query(query, (err, results) => {
+    if (err) throw err;
+    res.json(results);
+  });
 });
 
-  app.get('/api/inactive-customers', (req, res) => {
-    const query = `
+// Get the most popular product in terms of the number of times it has been added to customers' carts
+app.get('/api/most-popular-product', (req, res) => {
+  const query = `
+    SELECT book.title, COUNT(order_item.book_id) AS times_added
+    FROM book
+    JOIN order_item ON book.id = order_item.book_id
+    GROUP BY order_item.book_id
+    ORDER BY times_added DESC
+    LIMIT 1;
+  `;
+
+  db.query(query, (err, results) => {
+    if (err) {
+      console.error('Error executing query:', err);
+      return res.status(500).json({ error: 'Database query error' });
+    }
+    res.json(results[0]);
+  });
+});
+
+
+app.get('/api/inactive-customers', (req, res) => {
+  const query = `
       SELECT user.id, user.full_name
       FROM user
       LEFT JOIN \`order\` ON user.id = order.user_id
       WHERE order.created_at < NOW() - INTERVAL 6 MONTH OR order.id IS NULL;
     `;
-    
-    db.query(query, (err, results) => {
-      if (err) throw err;
-      res.json(results);
-    });
+
+  db.query(query, (err, results) => {
+    if (err) throw err;
+    res.json(results);
   });
+});
 // List the top 3 books that appear in the most wishlists
 app.get('/api/top-wishlist-books', (req, res) => {
-    const query = `
+  const query = `
       SELECT book.id, book.title, COUNT(wishlist_item.book_id) AS wishlist_count
       FROM book
       JOIN wishlist_item ON book.id = wishlist_item.book_id
@@ -365,59 +446,59 @@ app.get('/api/top-wishlist-books', (req, res) => {
       ORDER BY wishlist_count DESC
       LIMIT 3;
     `;
-    
-    db.query(query, (err, results) => {
-      if (err) throw err;
-      res.json(results);
-    });
+
+  db.query(query, (err, results) => {
+    if (err) throw err;
+    res.json(results);
+  });
 });
 
-  //List the top 3 books that appear in the most wishlists
-  app.get('/api/revenue-by-month', (req, res) => {
-    const query = `
+//List the top 3 books that appear in the most wishlists
+app.get('/api/revenue-by-month', (req, res) => {
+  const query = `
       SELECT DATE_FORMAT(order.created_at, '%Y-%m') AS month, SUM(order.total_price) AS total_revenue
       FROM \`order\`
       GROUP BY month
       ORDER BY month;
     `;
-    
-    db.query(query, (err, results) => {
-      if (err) throw err;
-      res.json(results);
-    });
+
+  db.query(query, (err, results) => {
+    if (err) throw err;
+    res.json(results);
   });
-  //Calculate the total revenue for each month
-  app.get('/api/revenue-by-month', (req, res) => {
-    const query = `
+});
+//Calculate the total revenue for each month
+app.get('/api/revenue-by-month', (req, res) => {
+  const query = `
       SELECT DATE_FORMAT(order.created_at, '%Y-%m') AS month, SUM(order.total_price) AS total_revenue
       FROM \`order\`
       GROUP BY month
       ORDER BY month;
     `;
-    
-    db.query(query, (err, results) => {
-      if (err) throw err;
-      res.json(results);
-    });
+
+  db.query(query, (err, results) => {
+    if (err) throw err;
+    res.json(results);
   });
-  //Retrieve the total sales for each product and display only products that have been sold more than 100 times
-  app.get('/api/top-selling-products', (req, res) => {
-    const query = `
+});
+//Retrieve the total sales for each product and display only products that have been sold more than 100 times
+app.get('/api/top-selling-products', (req, res) => {
+  const query = `
       SELECT book.id, book.title, SUM(order_item.quantity) AS total_sold
       FROM book
       JOIN order_item ON book.id = order_item.book_id
       GROUP BY book.id
       HAVING total_sold > 100;
     `;
-    
-    db.query(query, (err, results) => {
-      if (err) throw err;
-      res.json(results);
-    });
+
+  db.query(query, (err, results) => {
+    if (err) throw err;
+    res.json(results);
   });
-  // Find the customers who have purchased books from every category in the store
-  app.get('/api/customers-all-categories', (req, res) => {
-    const query = `
+});
+// Find the customers who have purchased books from every category in the store
+app.get('/api/customers-all-categories', (req, res) => {
+  const query = `
       SELECT user.id, user.full_name
       FROM user
       JOIN \`order\` ON user.id = order.user_id
@@ -427,60 +508,60 @@ app.get('/api/top-wishlist-books', (req, res) => {
       GROUP BY user.id
       HAVING COUNT(DISTINCT category.id) = (SELECT COUNT(*) FROM category);
     `;
-    
-    db.query(query, (err, results) => {
-      if (err) throw err;
-      res.json(results);
-    });
+
+  db.query(query, (err, results) => {
+    if (err) throw err;
+    res.json(results);
   });
-  //Find the longest-time customers (customer with the earliest signup)
-  app.get('/api/longest-time-customers', (req, res) => {
-    const query = `
+});
+//Find the longest-time customers (customer with the earliest signup)
+app.get('/api/longest-time-customers', (req, res) => {
+  const query = `
       SELECT user.id, user.full_name, MIN(user.created_at) AS signup_date
       FROM user
       GROUP BY user.id
       ORDER BY signup_date ASC
       LIMIT 1;
     `;
-    
-    db.query(query, (err, results) => {
-      if (err) throw err;
-      res.json(results[0]);
-    });
+
+  db.query(query, (err, results) => {
+    if (err) throw err;
+    res.json(results[0]);
   });
-  //Get the total quantity of products ordered by each customer
-  app.get('/api/total-quantity-by-customer', (req, res) => {
-    const query = `
+});
+//Get the total quantity of products ordered by each customer
+app.get('/api/total-quantity-by-customer', (req, res) => {
+  const query = `
       SELECT user.id, user.full_name, SUM(order_item.quantity) AS total_quantity
       FROM user
       JOIN \`order\` ON user.id = order.user_id
       JOIN order_item ON order.id = order_item.order_id
       GROUP BY user.id;
     `;
-    
-    db.query(query, (err, results) => {
-      if (err) throw err;
-      res.json(results);
-    });
+
+  db.query(query, (err, results) => {
+    if (err) throw err;
+    res.json(results);
   });
+});
 //Find the average price of products in orders with more than 5 items
-  app.get('/api/average-price-orders-more-than-5', (req, res) => {
-    const query = `
+app.get('/api/average-price-orders-more-than-5', (req, res) => {
+  const query = `
       SELECT AVG(book.price) AS average_price
       FROM book
       JOIN order_item ON book.id = order_item.book_id
       GROUP BY order_item.order_id
       HAVING COUNT(order_item.id) > 5;
     `;
-    
-    db.query(query, (err, results) => {
-      if (err) throw err;
-      res.json(results);
-    });
+
+  db.query(query, (err, results) => {
+    if (err) throw err;
+    res.json(results);
   });
-  //Find the category with the most books sold
-  app.get('/api/category-most-books-sold', (req, res) => {
-    const query = `
+});
+//Find the category with the most books sold
+app.get('/api/category-most-books-sold', (req, res) => {
+  const query = `
       SELECT category.genre, category.sub_genre, SUM(order_item.quantity) AS total_sold
       FROM book
       JOIN category ON book.category_id = category.id
@@ -489,17 +570,17 @@ app.get('/api/top-wishlist-books', (req, res) => {
       ORDER BY total_sold DESC
       LIMIT 1;
     `;
-    
-    db.query(query, (err, results) => {
-      if (err) throw err;
-      res.json(results[0]);
-    });
+
+  db.query(query, (err, results) => {
+    if (err) throw err;
+    res.json(results[0]);
   });
-  //Retrieve all customers who have purchased all products in a specific category
-  app.get('/api/customers-all-products-category/:categoryId', (req, res) => {
-    const { categoryId } = req.params;
-  
-    const query = `
+});
+//Retrieve all customers who have purchased all products in a specific category
+app.get('/api/customers-all-products-category/:categoryId', (req, res) => {
+  const { categoryId } = req.params;
+
+  const query = `
       SELECT user.id, user.full_name
       FROM user
       JOIN \`order\` ON user.id = order.user_id
@@ -509,73 +590,73 @@ app.get('/api/top-wishlist-books', (req, res) => {
       GROUP BY user.id
       HAVING COUNT(DISTINCT book.id) = (SELECT COUNT(*) FROM book WHERE category_id = ?);
     `;
-    
-    db.query(query, [categoryId, categoryId], (err, results) => {
-      if (err) throw err;
-      res.json(results);
-    });
+
+  db.query(query, [categoryId, categoryId], (err, results) => {
+    if (err) throw err;
+    res.json(results);
   });
+});
 //Get the most expensive product purchased in each order
-  app.get('/api/most-expensive-product-per-order', (req, res) => {
-    const query = `
+app.get('/api/most-expensive-product-per-order', (req, res) => {
+  const query = `
       SELECT order.id, book.title, MAX(book.price) AS max_price
       FROM \`order\`
       JOIN order_item ON order.id = order_item.order_id
       JOIN book ON order_item.book_id = book.id
       GROUP BY order.id;
     `;
-    
-    db.query(query, (err, results) => {
-      if (err) throw err;
-      res.json(results);
-    });
+
+  db.query(query, (err, results) => {
+    if (err) throw err;
+    res.json(results);
   });
+});
 //Calculate the running total of sales revenue over time
-  app.get('/api/running-total-sales', (req, res) => {
-    const query = `
+app.get('/api/running-total-sales', (req, res) => {
+  const query = `
       SELECT created_at, SUM(total_price) OVER (ORDER BY created_at ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS running_total
       FROM \`order\`
       ORDER BY created_at;
     `;
-    
-    db.query(query, (err, results) => {
-      if (err) throw err;
-      res.json(results);
-    });
+
+  db.query(query, (err, results) => {
+    if (err) throw err;
+    res.json(results);
   });
+});
 //List customers who made their first purchase in the last 30 days
-  app.get('/api/customers-first-purchase-30-days', (req, res) => {
-    const query = `
+app.get('/api/customers-first-purchase-30-days', (req, res) => {
+  const query = `
       SELECT user.id, user.full_name, MIN(order.created_at) AS first_purchase_date
       FROM user
       JOIN \`order\` ON user.id = order.user_id
       GROUP BY user.id
       HAVING first_purchase_date >= NOW() - INTERVAL 30 DAY;
     `;
-    
-    db.query(query, (err, results) => {
-      if (err) throw err;
-      res.json(results);
-    });
+
+  db.query(query, (err, results) => {
+    if (err) throw err;
+    res.json(results);
   });
+});
 //Get products not purchased in the last 6 months
-  app.get('/api/products-not-purchased-6-months', (req, res) => {
-    const query = `
+app.get('/api/products-not-purchased-6-months', (req, res) => {
+  const query = `
       SELECT book.id, book.title
       FROM book
       LEFT JOIN order_item ON book.id = order_item.book_id
       LEFT JOIN \`order\` ON order_item.order_id = order.id
       WHERE order.created_at < NOW() - INTERVAL 6 MONTH OR order_item.book_id IS NULL;
     `;
-    
-    db.query(query, (err, results) => {
-      if (err) throw err;
-      res.json(results);
-    });
+
+  db.query(query, (err, results) => {
+    if (err) throw err;
+    res.json(results);
   });
-  
+});
+
 // Start the server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });

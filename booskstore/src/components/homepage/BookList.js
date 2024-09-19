@@ -1,0 +1,39 @@
+import React, { useContext } from 'react';
+import axios from 'axios';
+import { CartContext } from '../../context/CartContext';
+
+const BookList = ({ books }) => {
+  const { cartItems, setCartItems } = useContext(CartContext);
+
+  const addToCart = async (book) => {
+    try {
+      const userId = 1; // Replace with actual logged-in user ID
+      const response = await axios.post(`http://localhost:5000/api/cart/${userId}`, {
+        bookId: book.id,
+        quantity: 1, // Default quantity
+        format: book.format // Assuming the book has a 'format' property
+      });
+      setCartItems([...cartItems, { ...book, quantity: 1 }]);
+      alert('Book added to cart!');
+    } catch (err) {
+      console.error(err);
+      alert('Failed to add book to cart');
+    }
+  };
+
+  return (
+    <div className="book-list">
+      {books.map(book => (
+        <div key={book.id} className="book-item">
+          <img src={book.coverImageUrl} alt={book.title} />
+          <h3>{book.title}</h3>
+          <p>{book.description}</p>
+          <p><strong>${book.price}</strong></p>
+          <button onClick={() => addToCart(book)}>Add to Cart</button>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+export default BookList;

@@ -1,0 +1,28 @@
+/* TestimonialsCarousel.css */
+.testimonials-carousel {
+    display: flex;
+    overflow-x: auto;
+    padding: 20px;
+    scroll-behavior: smooth;
+  }
+  
+  .testimonial-item {
+    background-color: #f8f9fa;
+    padding: 20px;
+    margin-right: 20px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    min-width: 300px;
+  }
+  
+  .testimonial-item p {
+    font-style: italic;
+  }
+  
+  .testimonial-item h4 {
+    margin-top: 10px;
+    font-size: 16px;
+    font-weight: bold;
+    color: #333;
+  }
+  

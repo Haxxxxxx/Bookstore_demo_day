@@ -1,0 +1,35 @@
+/* Footer.css */
+.footer {
+    background-color: #343a40;
+    color: #fff;
+    text-align: center;
+    padding: 20px;
+    margin-top: 50px;
+  }
+  
+  .footer p {
+    margin: 0;
+  }
+  
+  .footer ul {
+    list-style: none;
+    padding: 0;
+    margin: 10px 0 0;
+    display: flex;
+    justify-content: center;
+  }
+  
+  .footer ul li {
+    margin: 0 15px;
+  }
+  
+  .footer ul li a {
+    color: #fff;
+    text-decoration: none;
+    font-size: 14px;
+  }
+  
+  .footer ul li a:hover {
+    color: #ffcc00;
+  }
+  

@@ -1,0 +1,24 @@
+/* BookCarousel.css */
+.book-carousel {
+    display: flex;
+    overflow-x: scroll;
+    padding: 20px;
+    scroll-behavior: smooth;
+  }
+  
+  .carousel-item {
+    margin-right: 20px;
+    text-align: center;
+  }
+  
+  .carousel-item img {
+    width: 150px;
+    height: 200px;
+    object-fit: cover;
+  }
+  
+  .carousel-item h3 {
+    margin-top: 10px;
+    font-size: 18px;
+  }
+  

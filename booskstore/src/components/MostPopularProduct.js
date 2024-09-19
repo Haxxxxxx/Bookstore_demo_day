@@ -15,11 +15,14 @@ const MostPopularProduct = () => {
 
     return (
         <div>
-            <h2>Most Popular Product</h2>
             {popularProduct ? (
+                <>
                 <p>{popularProduct.title} - Added {popularProduct.times_added} times</p>
+                </>
             ) : (
+                <>
                 <p>Loading...</p>
+                </>
             )}
         </div>
     );
