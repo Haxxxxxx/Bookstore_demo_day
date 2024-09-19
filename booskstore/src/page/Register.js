@@ -21,14 +21,14 @@ const Register = () => {
         email,
         password,
         full_name: fullName,
-        phone
+        phone,
       });
 
       setSuccess('User registered successfully!');
-      // Optionally, you can redirect the user after successful registration
-      setTimeout(() => {
-        navigate('/login'); // Redirect to login page after 2 seconds
-      }, 2000);
+      // Auto-login the user
+      localStorage.setItem('user', JSON.stringify(res.data.user));
+      // Redirect to home page after registration
+      navigate('/');
     } catch (err) {
       setError(err.response?.data?.message || 'An error occurred');
     }

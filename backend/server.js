@@ -31,27 +31,33 @@ db.connect((err) => {
 // Endpoints
 // Simplified Registration (No bcrypt, no hashed password)
 app.post('/api/register', (req, res) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
-  }
+  const { email, password, full_name, phone, payment_id = null, role_id = 2 } = req.body; // Set payment_id to null by default
 
-  const { email, password, full_name, phone, role_id = 2 } = req.body; // Default role_id for user
-
-  // Insert the user into the user table (plain text password for now)
-  const userQuery = 'INSERT INTO user (email, password, full_name, phone) VALUES (?, ?, ?, ?)';
-  db.query(userQuery, [email, password, full_name, phone], (err, userResult) => {
-    if (err) throw err;
+  const userQuery = 'INSERT INTO user (email, password, full_name, phone, payment_id, created_at) VALUES (?, ?, ?, ?, ?, CURDATE())';
+  db.query(userQuery, [email, password, full_name, phone, payment_id], (err, userResult) => {
+    if (err) {
+      console.error('Error registering user:', err);
+      return res.status(500).json({ message: 'Error registering user', error: err });
+    }
 
     const userId = userResult.insertId;
 
-    // Insert the user-role relationship into user_role table
     const roleQuery = 'INSERT INTO user_role (user_id, role_id) VALUES (?, ?)';
     db.query(roleQuery, [userId, role_id], (err, roleResult) => {
-      if (err) throw err;
+      if (err) {
+        console.error('Error assigning role:', err);
+        return res.status(500).json({ message: 'Error assigning role', error: err });
+      }
 
-      // Respond with the success message
-      res.json({ message: 'User registered successfully', userId });
+      res.json({
+        message: 'User registered successfully',
+        user: {
+          id: userId,
+          email,
+          full_name,
+          phone,
+        },
+      });
     });
   });
 });
@@ -245,49 +251,157 @@ app.get('/api/cart/:userId', (req, res) => {
 });
 
 
+// Add an item to the user's cart
+app.post('/api/cart/:userId', (req, res) => {
+  const { userId } = req.params;
+  const { bookId, quantity, format } = req.body;
 
-// Get items in the cart for a user, including total price
+  // Find the user's pending order
+  const findPendingOrder = `
+    SELECT id, order_item_id FROM \`order\` WHERE user_id = ? AND state = 'pending' LIMIT 1;
+  `;
+
+  db.query(findPendingOrder, [userId], (err, results) => {
+    if (err) {
+      console.error('Error finding pending order:', err);
+      return res.status(500).json({ error: 'Database query error' });
+    }
+
+    let orderId, orderItemId;
+
+    if (results.length === 0) {
+      // If no pending order, create a new order
+      const createOrder = `
+        INSERT INTO \`order\` (user_id, total_price, state) VALUES (?, 0, 'pending');
+      `;
+      db.query(createOrder, [userId], (err, orderResult) => {
+        if (err) {
+          console.error('Error creating new order:', err);
+          return res.status(500).json({ error: 'Error creating new order' });
+        }
+
+        orderId = orderResult.insertId;
+        addItemToOrder(orderId, null); // Call the function to add item to the newly created order
+      });
+    } else {
+      orderId = results[0].id;
+      orderItemId = results[0].order_item_id;
+      addItemToOrder(orderId, orderItemId); // Add item to the existing order
+    }
+  });
+
+  // Function to add an item to the order
+  const addItemToOrder = (orderId, orderItemId) => {
+    if (orderItemId) {
+      // If there's an existing order item, update its quantity
+      const updateOrderItem = `
+        UPDATE order_item 
+        SET quantity = quantity + ?
+        WHERE id = ? AND book_id = ?;
+      `;
+      db.query(updateOrderItem, [quantity, orderItemId, bookId], (err) => {
+        if (err) {
+          console.error('Error updating order item:', err);
+          return res.status(500).json({ error: 'Error updating order item' });
+        }
+        res.json({ message: 'Item updated in cart' });
+      });
+    } else {
+      // Insert a new order item
+      const insertOrderItem = `
+        INSERT INTO order_item (quantity, format, book_id)
+        VALUES (?, ?, ?);
+      `;
+      db.query(insertOrderItem, [quantity, format, bookId], (err, result) => {
+        if (err) {
+          console.error('Error inserting order item:', err);
+          return res.status(500).json({ error: 'Error inserting order item' });
+        }
+
+        const newOrderItemId = result.insertId;
+
+        // Update the order with the new order_item_id
+        const updateOrder = `
+          UPDATE \`order\`
+          SET order_item_id = ?
+          WHERE id = ?;
+        `;
+        db.query(updateOrder, [newOrderItemId, orderId], (err) => {
+          if (err) {
+            console.error('Error updating order:', err);
+            return res.status(500).json({ error: 'Error updating order with new order_item_id' });
+          }
+          res.json({ message: 'Item added to cart' });
+        });
+      });
+    }
+  };
+});
+
+
+
+
+// Get all items in a user's cart with total price
 app.get('/api/cart/:userId', (req, res) => {
   const { userId } = req.params;
 
   const query = `
-      SELECT book.id, book.title, book.price, order_item.quantity, order_item.format, (book.price * order_item.quantity) AS total_item_price
-      FROM book
-      JOIN order_item ON book.id = order_item.book_id
-      JOIN \`order\` ON order_item.order_id = \`order\`.id
-      WHERE \`order\`.user_id = ? AND \`order\`.state = "pending";
+    SELECT book.id, book.title, book.price, order_item.quantity, order_item.format, 
+           (book.price * order_item.quantity) AS total_item_price
+    FROM book
+    JOIN order_item ON book.id = order_item.book_id
+    JOIN \`order\` ON order_item.order_id = \`order\`.id
+    WHERE \`order\`.user_id = ? AND \`order\`.state = "pending";
   `;
 
   db.query(query, [userId], (err, results) => {
-    if (err) throw err;
+    if (err) {
+      console.error('Error fetching cart items:', err);
+      return res.status(500).json({ error: 'Database query error' });
+    }
 
-    // Calculate total cart price
     const totalCartPrice = results.reduce((acc, item) => acc + item.total_item_price, 0);
-
     res.json({ items: results, totalPrice: totalCartPrice });
   });
 });
 
-// Update cart item quantity
+
 // Update cart item quantity (fixed query)
 app.put('/api/cart/:userId/:bookId', (req, res) => {
   const { userId, bookId } = req.params;
   const { quantity } = req.body;
 
-  const query = `
-        UPDATE order_item 
-        JOIN \`order\` ON \`order\`.user_id = ? 
-        SET order_item.quantity = ?
-        WHERE order_item.book_id = ? AND \`order\`.state = "pending";
+  if (quantity <= 0) {
+    const deleteQuery = `
+      DELETE order_item 
+      FROM order_item
+      JOIN \`order\` ON order_item.order_id = \`order\`.id 
+      WHERE order_item.book_id = ? AND \`order\`.user_id = ? AND \`order\`.state = "pending";
     `;
-
-  db.query(query, [userId, quantity, bookId], (err, results) => {
-    if (err) {
-      console.error('Error updating cart item:', err);
-      return res.status(500).json({ error: 'Database query error' });
-    }
-    res.json({ message: 'Cart item updated successfully' });
-  });
+    
+    db.query(deleteQuery, [bookId, userId], (err) => {
+      if (err) {
+        console.error('Error deleting cart item:', err);
+        return res.status(500).json({ error: 'Database query error' });
+      }
+      res.json({ message: 'Item removed from cart' });
+    });
+  } else {
+    const updateQuery = `
+      UPDATE order_item 
+      JOIN \`order\` ON \`order\`.id = order_item.order_id
+      SET order_item.quantity = ?
+      WHERE order_item.book_id = ? AND \`order\`.user_id = ? AND \`order\`.state = "pending";
+    `;
+  
+    db.query(updateQuery, [quantity, bookId, userId], (err) => {
+      if (err) {
+        console.error('Error updating cart item:', err);
+        return res.status(500).json({ error: 'Database query error' });
+      }
+      res.json({ message: 'Cart item updated successfully' });
+    });
+  }
 });
 
 // Confirm order (update from pending to confirmed and add payment)
@@ -295,30 +409,41 @@ app.put('/api/cart/confirm/:userId', (req, res) => {
   const { userId } = req.params;
   const { paymentMethod } = req.body;
 
+  if (!paymentMethod) {
+    return res.status(400).json({ message: 'Payment method is required' });
+  }
+
   // Confirm the order by setting its state to 'confirmed'
   const updateOrderState = `
-      UPDATE \`order\`
-      SET state = "confirmed"
-      WHERE user_id = ? AND state = "pending";
+    UPDATE \`order\`
+    SET state = "confirmed"
+    WHERE user_id = ? AND state = "pending";
   `;
 
-  db.query(updateOrderState, [userId], (err, orderResults) => {
-    if (err) throw err;
+  db.query(updateOrderState, [userId], (err) => {
+    if (err) {
+      console.error('Error confirming order:', err);
+      return res.status(500).json({ error: 'Database query error' });
+    }
 
-    // Once the order is confirmed, we add a payment entry
+    // Once the order is confirmed, add a payment entry
     const createPayment = `
-          INSERT INTO payment (payment_method, payment_status, payment_date, amount, order_id, user_id)
-          SELECT ?, "Completed", NOW(), total_price, id, user_id
-          FROM \`order\`
-          WHERE user_id = ? AND state = "confirmed"
-      `;
+      INSERT INTO payment (payment_method, payment_status, payment_date, amount, order_id, user_id)
+      SELECT ?, "Completed", NOW(), total_price, id, user_id
+      FROM \`order\`
+      WHERE user_id = ? AND state = "confirmed";
+    `;
 
     db.query(createPayment, [paymentMethod, userId], (err) => {
-      if (err) throw err;
+      if (err) {
+        console.error('Error creating payment entry:', err);
+        return res.status(500).json({ error: 'Database query error' });
+      }
       res.json({ message: 'Order confirmed and payment recorded' });
     });
   });
 });
+
 
 // Get all orders placed by a customer by user ID
 app.get('/api/orders/:userId', (req, res) => {

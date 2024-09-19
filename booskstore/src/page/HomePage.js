@@ -12,6 +12,7 @@ const HomePage = () => {
   const [books, setBooks] = useState([]);
   const [filteredBooks, setFilteredBooks] = useState([]);
   const [filter, setFilter] = useState('');
+  const [user, setUser] = useState(null);
 
   // Fetch all books from your API on component mount
   useEffect(() => {
@@ -21,6 +22,12 @@ const HomePage = () => {
       setFilteredBooks(res.data);
     };
     fetchBooks();
+
+    // Check if user is logged in (exists in localStorage)
+    const loggedInUser = JSON.parse(localStorage.getItem('user'));
+    if (loggedInUser) {
+      setUser(loggedInUser);
+    }
   }, []);
 
   // Handle filtering books by genre, category, etc.
@@ -41,7 +48,12 @@ const HomePage = () => {
       {/* Header with focus on best-selling book */}
       <header className="header-section">
         <div className="header-content">
-          <h1>Welcome to Our Online Bookstore</h1>
+          {/* Conditionally show welcome message with user's name */}
+          {user ? (
+            <h1>Welcome, {user.full_name}!</h1>
+          ) : (
+            <h1>Welcome to Our Online Bookstore</h1>
+          )}
           <p>Discover the most popular book</p>
           <MostPopularProduct />
           <button>Buy Now</button>

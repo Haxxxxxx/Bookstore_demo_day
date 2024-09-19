@@ -62,17 +62,32 @@ export const getMostRecentBookInCategory = async () => {
     return response.data;
 };
 
-// Fetch all products in a customer’s cart by user ID
+// Fetch all products in the user's cart
 export const getCartItemsByUserId = async (userId) => {
-    const response = await axios.get(`${API_URL}/cart/${userId}`);
-    return response.data;
-};
-
-// Add item to cart (create pending order if not exist)
-export const addToCart = async (userId, bookId, quantity, format) => {
-    const response = await axios.post(`${API_URL}/cart/${userId}`, { bookId, quantity, format });
-    return response.data;
-};
+    try {
+      const response = await axios.get(`${API_URL}/cart/${userId}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching cart items:', error);
+      throw error;
+    }
+  };
+  
+  // Add item to cart
+  export const addToCart = async (userId, bookId, quantity, format) => {
+    try {
+      const response = await axios.post(`${API_URL}/cart/${userId}`, {
+        bookId,
+        quantity,
+        format,
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error adding to cart:', error);
+      throw error;
+    }
+  };
+  
 
 // Fetch cart items for a user
 export const getCartItems = async (userId) => {
